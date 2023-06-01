@@ -24,11 +24,12 @@ int radix_tree_insert_internel(struct radix_tree_node *node, uint64_t entry,
     new_node->parent = node->parent;
     // 需要获得上一级的index，也就是当前node在parent的index
     node->parent->children[parent_index] = new_node;
+    node->parent = new_node;
     // 把当前node插入分裂之后的new_node
     size_t index = node->rest >> (height * RADIX_TREE_MAP_SHIFT);
     new_node->children[index] = node;
     // rest减少一级
-    node->rest = entry - (index << (height * RADIX_TREE_MAP_SHIFT));
+    node->rest = node->rest - (index << (height * RADIX_TREE_MAP_SHIFT));
     node = new_node;
   }
 
@@ -77,7 +78,7 @@ void *radix_tree_find_internel(struct radix_tree_node *node, size_t entry,
   }
 
   if (height == 0) {
-    return nullptr;
+    return node->children[index]->element;
   }
 
   return radix_tree_find_internel(
