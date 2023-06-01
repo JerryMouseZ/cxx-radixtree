@@ -41,7 +41,7 @@ int radix_tree_insert_internel(struct radix_tree_node *node, uint64_t entry,
     memset(new_node, 0, sizeof(radix_tree_node));
     new_node->parent = node;
     new_node->is_leaf = true;
-    new_node->rest = entry - (index << (height * RADIX_TREE_MAP_MASK));
+    new_node->rest = entry - (index << (height * RADIX_TREE_MAP_SHIFT));
     new_node->element = item;
     node->children[index] = new_node;
     return 0;
