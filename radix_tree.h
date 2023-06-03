@@ -29,7 +29,7 @@
 struct radix_tree_node {
   struct radix_tree_node *parent;
   uint64_t rest;
-  /* uint8_t height; */
+  uint8_t height;
   void *element;
   bool is_leaf;
   radix_tree_node *children[64];

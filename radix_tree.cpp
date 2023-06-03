@@ -10,9 +10,6 @@
 #include <cstdio>
 #include <cstdlib>
 
-// insert a new entry into the tree
-// return 0 if success
-// return -1 if fail
 int radix_tree_insert_internel(struct radix_tree_node *node, uint64_t entry,
                                void *item, size_t height, size_t parent_index) {
   // split the node
@@ -21,6 +18,8 @@ int radix_tree_insert_internel(struct radix_tree_node *node, uint64_t entry,
         (struct radix_tree_node *)malloc(sizeof(struct radix_tree_node));
     memset(new_node, 0, sizeof(radix_tree_node));
     new_node->is_leaf = false;
+    new_node->height = height + 1;
+    node->height = height;
     new_node->parent = node->parent;
     // 需要获得上一级的index，也就是当前node在parent的index
     node->parent->children[parent_index] = new_node;
@@ -41,6 +40,7 @@ int radix_tree_insert_internel(struct radix_tree_node *node, uint64_t entry,
     memset(new_node, 0, sizeof(radix_tree_node));
     new_node->parent = node;
     new_node->is_leaf = true;
+    new_node->height = height;
     new_node->rest = entry - (index << (height * RADIX_TREE_MAP_SHIFT));
     new_node->element = item;
     node->children[index] = new_node;
@@ -48,28 +48,32 @@ int radix_tree_insert_internel(struct radix_tree_node *node, uint64_t entry,
   }
 
   if (height == 0) {
-    // 已经到了最后一级
+    // 已经到了最后一级，进入这个分支说明之前已经有这个元素了
     return -1;
   }
+
   return radix_tree_insert_internel(
       node->children[index], entry - (index << (height * RADIX_TREE_MAP_SHIFT)),
       item, height - 1, index);
 }
 
+// insert a new entry into the tree
+// return 0 if success
+// return -1 if fail
 int radix_tree_insert(struct radix_tree *tree, uint64_t entry, void *item) {
   struct radix_tree_node *node = tree->root;
   size_t height = tree->height;
   return radix_tree_insert_internel(node, entry, item, height, -1);
 }
 
-void *radix_tree_find_internel(struct radix_tree_node *node, size_t entry,
-                               size_t height) {
+radix_tree_node *radix_tree_find_internel(struct radix_tree_node *node,
+                                          size_t entry, size_t height) {
   size_t index = entry >> (height * RADIX_TREE_MAP_SHIFT);
   assert(index < RADIX_TREE_MAP_SIZE);
   if (node->is_leaf) {
     size_t rest = entry - (index << (height * RADIX_TREE_MAP_SHIFT));
     if (rest == node->rest)
-      return node->element;
+      return node;
     return nullptr;
   }
 
@@ -78,7 +82,7 @@ void *radix_tree_find_internel(struct radix_tree_node *node, size_t entry,
   }
 
   if (height == 0) {
-    return node->children[index]->element;
+    return node->children[index];
   }
 
   return radix_tree_find_internel(
@@ -92,94 +96,53 @@ void *radix_tree_find_internel(struct radix_tree_node *node, size_t entry,
 void *radix_tree_find(struct radix_tree *tree, size_t entry) {
   struct radix_tree_node *node = tree->root;
   size_t height = tree->height;
-  return radix_tree_find_internel(node, entry, height);
+  node = radix_tree_find_internel(node, entry, height);
+  if (node)
+    return node->element;
+  return nullptr;
 }
-// void* radix_tree_find(struct radix_tree *tree, size_t entry) {
-//   struct radix_tree_node *node = tree->root;
-//   size_t height = tree->height;
-//   size_t index = entry >> (height * RADIX_TREE_MAP_SHIFT);
-//   assert(index < RADIX_TREE_MAP_SIZE);
-//   while (height > 0) {
-//     if (node->children[index] == nullptr) {
-//       return nullptr;
-//     }
-//     node = (radix_tree_node *)node->children[index];
-//     height--;
-//     index = (entry >> (height * RADIX_TREE_MAP_SHIFT)) & RADIX_TREE_MAP_MASK;
-//   }
-
-//   return node->children[index];
-// }
 
 // delete the entry in the tree
 // return 0 if success
 // return -1 if fail
-// int radix_tree_delete(struct radix_tree *tree, size_t entry) {
-//   struct radix_tree_node *node = tree->root;
-//   struct radix_tree_node *parent = nullptr;
-//   size_t height = tree->height;
-//   size_t index = entry >> (height * RADIX_TREE_MAP_SHIFT);
-//   assert(index < RADIX_TREE_MAP_SIZE);
-//   while (height > 0) {
-//     if (node->children[index] == nullptr) {
-//       return -1;
-//     } else if (height == 1 &&
-//                ((radix_tree_node *)(node->children[index]))->children[0] !=
-//                    nullptr &&
-//                ((radix_tree_node *)(node->children[index]))->children[1] ==
-//                    nullptr) {
-//       // Merge current node with its only child
-//       struct radix_tree_node *child =
-//           (radix_tree_node *)(((radix_tree_node *)(node->children[index]))
-//                                   ->children[0]);
-//       node->children[index] = child;
-//       child->parent = node;
-//       free(((radix_tree_node *)(node->children[index]))->children[0]);
-//       ((radix_tree_node *)(node->children[index]))->children[0] = nullptr;
-//     } else {
-//       parent = node;
-//       node = (radix_tree_node *)node->children[index];
-//     }
-//     height--;
-//     index = (entry >> (height * RADIX_TREE_MAP_SHIFT)) & RADIX_TREE_MAP_MASK;
-//   }
-//   if (node == nullptr) {
-//     return -1;
-//   }
-//   if (parent == nullptr) {
-//     tree->root = (radix_tree_node *)node->children[index];
-//   } else {
-//     parent->children[index] = node->children[index];
-//     if (node->children[index] != nullptr) {
-//       ((radix_tree_node *)(node->children[index]))->parent = parent;
-//     }
-//   }
-//   free(node);
-//   return 0;
-// }
-// int radix_tree_delete(struct radix_tree *tree, size_t entry) {
-//   struct radix_tree_node *node = tree->root;
-//   size_t height = tree->height;
-//   size_t index = entry >> (height * 8);
-//   assert(index < 256);
-//   while (height > 0) {
-//     if (node->children[index] == nullptr) {
-//       return -1;
-//     }
-//     node = (radix_tree_node *)node->children[index];
-//     height--;
-//     index = (entry >> (height * RADIX_TREE_MAP_SHIFT)) & RADIX_TREE_MAP_MASK;
-//   }
+int radix_tree_delete(struct radix_tree *tree, unsigned long entry) {
+  radix_tree_node *node = tree->root;
+  size_t height = tree->height;
+  node = radix_tree_find_internel(node, entry, height);
+  if (node == nullptr)
+    return -1;
+  size_t index = entry >> (node->height * RADIX_TREE_MAP_SHIFT);
+  index &= RADIX_TREE_MAP_MASK;
+  radix_tree_node *backup = node->parent->children[0];
+  node->parent->children[index] = nullptr;
+  free(backup);
+  return 0;
+}
 
-//   node->children[index] = nullptr;
-//   return 0;
-// }
+void radix_tree_free_internel(radix_tree_node *node, size_t height) {
+  for (int i = 0; i < RADIX_TREE_MAP_SIZE; i++) {
+    if (node->children[i] != nullptr) {
+      if (height == 0) {
+        free(node->children[i]);
+      } else {
+        radix_tree_free_internel(node->children[i], height - 1);
+      }
+    }
+  }
+}
+
+void radix_tree_free(struct radix_tree *tree) {
+  radix_tree_node *node = tree->root;
+  size_t height = tree->height;
+  radix_tree_free_internel(node, height);
+}
 
 // test the tree
 void radix_tree_test() {
   struct radix_tree tree;
   tree.root = (struct radix_tree_node *)malloc(sizeof(struct radix_tree_node));
   tree.root->parent = nullptr;
+  tree.root->height = 3;
   memset(tree.root->children, 0, sizeof(tree.root->children));
   tree.height = 2;
   for (size_t i = 0; i < 100; i++) {
@@ -190,14 +153,14 @@ void radix_tree_test() {
       printf("find %ld failed\n", i);
     }
   }
-  /* for (size_t i = 0; i < 100; i++) { */
-  /*   if (radix_tree_delete(&tree, i) != 0) { */
-  /*     printf("delete %ld failed\n", i); */
-  /*   } */
-  /* } */
-  /* for (size_t i = 0; i < 100; i++) { */
-  /*   if (radix_tree_find(&tree, i) != nullptr) { */
-  /*     printf("delete %ld failed\n", i); */
-  /*   } */
-  /* } */
+  for (size_t i = 0; i < 100; i++) {
+    if (radix_tree_delete(&tree, i) != 0) {
+      printf("delete %ld failed\n", i);
+    }
+  }
+  for (size_t i = 0; i < 100; i++) {
+    if (radix_tree_find(&tree, i) != nullptr) {
+      printf("delete %ld failed\n", i);
+    }
+  }
 }
